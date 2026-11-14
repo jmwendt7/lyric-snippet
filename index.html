@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lyric Snippet</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>🎵 Lyric Snippet</h1>
+    <p class="sub">Type a lyric (with the song or artist if you know it) and send the exact moment to a friend.</p>
+    <form id="form">
+      <input id="q" type="text" placeholder="e.g. tiny dancer hold me closer" autocomplete="off" required>
+      <button type="submit">Find</button>
+    </form>
+    <p id="status" role="status"></p>
+    <ul id="results"></ul>
+  </main>
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
