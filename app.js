@@ -45,27 +45,33 @@ async function search(lyric, song) {
 const videoCache = JSON.parse(localStorage.getItem("videoCache") || "{}");
 const offsets = JSON.parse(localStorage.getItem("offsets") || "{}");
 
-async function findVideo(track) {
+const saveVideos = () => localStorage.setItem("videoCache", JSON.stringify(videoCache));
+
+// Returns { items: [{id, title}], chosen } for a track, cached per song.
+async function findVideos(track) {
   const q = `${track.artistName} ${track.trackName}`;
   const key = window.YT_API_KEY;
   if (!key) return null;
-  if (videoCache[q]) return videoCache[q];
-  const id = await fetchVideo(q, key);
-  if (id) {
-    videoCache[q] = id;
-    localStorage.setItem("videoCache", JSON.stringify(videoCache));
-  }
-  return id;
+  const hit = videoCache[q];
+  if (hit && hit.items) return hit;
+  const items = await fetchVideos(q, key);
+  if (!items.length) return null;
+  // Prefer an explicit upload over clean/radio edits when the title makes it clear
+  const bad = /clean|radio edit|censored/i;
+  const good = items.find((i) => /explicit/i.test(i.title) && !bad.test(i.title)) || items.find((i) => !bad.test(i.title)) || items[0];
+  videoCache[q] = { items, chosen: good.id };
+  saveVideos();
+  return videoCache[q];
 }
 
-async function fetchVideo(q, key) {
+async function fetchVideos(q, key) {
   // "official audio" uploads usually lack the music-video intro, so they line up with LRCLIB times
-  const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=" +
+  const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=" +
     encodeURIComponent(q + " official audio") + "&key=" + key;
   const res = await fetch(url);
-  if (!res.ok) return null;
+  if (!res.ok) return [];
   const data = await res.json();
-  return data.items?.[0]?.id?.videoId ?? null;
+  return (data.items || []).map((i) => ({ id: i.id.videoId, title: i.snippet.title }));
 }
 
 function linkFor(track, videoId, seconds) {
@@ -79,7 +85,7 @@ async function renderMatch({ track, hit }) {
   const lines = parseLrc(track.syncedLyrics);
   let picked = hit ? { time: hit.time, text: hit.text } : null;
 
-  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div><div class="preview" hidden><iframe allow="autoplay; encrypted-media" allowfullscreen></iframe><div class="offset"><button data-d="-5">−5s</button><button data-d="-1">−1s</button><span></span><button data-d="1">+1s</button><button data-d="5">+5s</button></div><p class="hint">Out of sync? Nudge until the lyric lines up, then Share.</p></div><ul class="lyrics" hidden></ul>`;
+  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div><div class="preview" hidden><iframe allow="autoplay; encrypted-media" allowfullscreen></iframe><select class="version"></select><div class="offset"><button data-d="-5">−5s</button><button data-d="-1">−1s</button><span></span><button data-d="1">+1s</button><button data-d="5">+5s</button></div><p class="hint">Out of sync? Nudge until the lyric lines up, then Share.</p></div><ul class="lyrics" hidden></ul>`;
   li.querySelector(".title").textContent = track.trackName;
   li.querySelector(".artist").textContent = track.artistName;
   const lineEl = li.querySelector(".line");
@@ -122,7 +128,21 @@ async function renderMatch({ track, hit }) {
     toggle.textContent = lyricsEl.hidden ? "Lyrics" : "Hide lyrics";
   });
   // The YouTube lookup happens only here, on demand, to save quota.
-  const resolveVideo = async () => { videoId = videoId || (await findVideo(track)); };
+  const versionEl = previewEl.querySelector(".version");
+  const resolveVideo = async () => {
+    if (videoId) return;
+    const v = await findVideos(track);
+    if (!v) return;
+    videoId = v.chosen;
+    for (const it of v.items) versionEl.append(new Option(it.title, it.id, false, it.id === v.chosen));
+    versionEl.hidden = v.items.length < 2;
+  };
+  versionEl.addEventListener("change", () => {
+    videoId = versionEl.value;
+    videoCache[offsetKey].chosen = videoId;
+    saveVideos();
+    loadPreview();
+  });
   play.addEventListener("click", async () => {
     await resolveVideo();
     if (!videoId) { window.open(currentLink(), "_blank"); return; }
