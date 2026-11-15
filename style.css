@@ -14,3 +14,7 @@ li { background: #1c1c1c; border-radius: 12px; padding: 14px; margin: 12px 0; }
 .actions { display: flex; gap: 8px; }
 .actions button, .actions a { flex: 1; text-align: center; text-decoration: none; padding: 10px; border-radius: 10px; background: #333; color: #eee; font-size: 15px; border: 0; }
 .actions .share { background: #0a84ff; color: #fff; }
+.lyrics { max-height: 260px; overflow-y: auto; margin: 10px 0 0; }
+.lyrics li { background: none; margin: 0; padding: 8px; border-radius: 8px; cursor: pointer; font-size: 15px; }
+.lyrics li:hover { background: #2a2a2a; }
+.lyrics li.sel { background: #0a84ff; color: #fff; }

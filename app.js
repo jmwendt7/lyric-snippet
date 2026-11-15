@@ -61,26 +61,52 @@ function linkFor(track, videoId, seconds) {
 
 async function renderMatch({ track, hit }) {
   const li = document.createElement("li");
-  const start = hit ? Math.max(0, hit.time - 2) : 0; // lead in a little before the lyric
   const videoId = await findVideo(track);
-  const link = linkFor(track, videoId, start);
-  const text = `🎵 ${track.trackName} – ${track.artistName}` + (hit ? ` (${formatTime(hit.time)})` : "");
+  const lines = parseLrc(track.syncedLyrics);
+  let picked = hit ? { time: hit.time, text: hit.text } : null;
 
-  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div>`;
+  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div><ul class="lyrics" hidden></ul>`;
   li.querySelector(".title").textContent = track.trackName;
   li.querySelector(".artist").textContent = track.artistName;
-  li.querySelector(".line").textContent = hit ? `“${hit.text}” at ${formatTime(hit.time)}` : "No exact lyric match";
+  const lineEl = li.querySelector(".line");
+  const lyricsEl = li.querySelector(".lyrics");
+
+  const currentLink = () => linkFor(track, videoId, picked ? Math.max(0, picked.time - 2) : 0); // lead in a little
+  const currentText = () => `🎵 ${track.trackName} – ${track.artistName}` + (picked ? ` (${formatTime(picked.time)})` : "");
+  const refresh = () => {
+    lineEl.textContent = picked ? `“${picked.text}” at ${formatTime(picked.time)}` : "No lyric match. Tap “Lyrics” and pick a line.";
+    play.href = currentLink();
+  };
 
   const actions = li.querySelector(".actions");
-  const open = Object.assign(document.createElement("a"), { href: link, target: "_blank", rel: "noopener", textContent: "Play" });
+  const play = Object.assign(document.createElement("a"), { target: "_blank", rel: "noopener", textContent: "Play" });
+  const toggle = Object.assign(document.createElement("button"), { textContent: "Lyrics" });
   const share = Object.assign(document.createElement("button"), { className: "share", textContent: "Share" });
+
+  for (const l of lines) {
+    const row = document.createElement("li");
+    row.textContent = l.text;
+    row.addEventListener("click", () => {
+      picked = { time: l.time, text: l.text };
+      lyricsEl.querySelectorAll(".sel").forEach((e) => e.classList.remove("sel"));
+      row.classList.add("sel");
+      refresh();
+    });
+    lyricsEl.append(row);
+  }
+  toggle.addEventListener("click", () => {
+    lyricsEl.hidden = !lyricsEl.hidden;
+    toggle.textContent = lyricsEl.hidden ? "Lyrics" : "Hide lyrics";
+  });
   share.addEventListener("click", async () => {
+    const text = currentText(), url = currentLink();
     if (navigator.share) {
-      try { await navigator.share({ title: text, text, url: link }); } catch { /* cancelled */ }
+      try { await navigator.share({ title: text, text, url }); } catch { /* cancelled */ }
     } else {
-      location.href = "sms:&body=" + encodeURIComponent(`${text}\n${link}`);
+      location.href = "sms:&body=" + encodeURIComponent(`${text}\n${url}`);
     }
   });
-  actions.append(open, share);
+  actions.append(play, toggle, share);
+  refresh();
   return li;
 }
