@@ -43,6 +43,7 @@ async function search(lyric, song) {
 }
 
 const videoCache = JSON.parse(localStorage.getItem("videoCache") || "{}");
+const offsets = JSON.parse(localStorage.getItem("offsets") || "{}");
 
 async function findVideo(track) {
   const q = `${track.artistName} ${track.trackName}`;
@@ -58,8 +59,9 @@ async function findVideo(track) {
 }
 
 async function fetchVideo(q, key) {
+  // "official audio" uploads usually lack the music-video intro, so they line up with LRCLIB times
   const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=" +
-    encodeURIComponent(q) + "&key=" + key;
+    encodeURIComponent(q + " official audio") + "&key=" + key;
   const res = await fetch(url);
   if (!res.ok) return null;
   const data = await res.json();
@@ -77,13 +79,22 @@ async function renderMatch({ track, hit }) {
   const lines = parseLrc(track.syncedLyrics);
   let picked = hit ? { time: hit.time, text: hit.text } : null;
 
-  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div><ul class="lyrics" hidden></ul>`;
+  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div><div class="preview" hidden><iframe allow="autoplay; encrypted-media" allowfullscreen></iframe><div class="offset"><button data-d="-5">−5s</button><button data-d="-1">−1s</button><span></span><button data-d="1">+1s</button><button data-d="5">+5s</button></div><p class="hint">Out of sync? Nudge until the lyric lines up, then Share.</p></div><ul class="lyrics" hidden></ul>`;
   li.querySelector(".title").textContent = track.trackName;
   li.querySelector(".artist").textContent = track.artistName;
   const lineEl = li.querySelector(".line");
   const lyricsEl = li.querySelector(".lyrics");
 
-  const currentLink = () => linkFor(track, videoId, picked ? Math.max(0, picked.time - 2) : 0); // lead in a little
+  const offsetKey = `${track.artistName} ${track.trackName}`;
+  const startTime = () => Math.max(0, (picked ? picked.time - 2 : 0) + (offsets[offsetKey] || 0)); // lead in a little
+  const currentLink = () => linkFor(track, videoId, startTime());
+  const previewEl = li.querySelector(".preview");
+  const frame = previewEl.querySelector("iframe");
+  const offsetLabel = previewEl.querySelector(".offset span");
+  const loadPreview = () => {
+    offsetLabel.textContent = `${(offsets[offsetKey] || 0) > 0 ? "+" : ""}${offsets[offsetKey] || 0}s`;
+    frame.src = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime())}&autoplay=1&playsinline=1`;
+  };
   const currentText = () => `🎵 ${track.trackName} – ${track.artistName}` + (picked ? ` (${formatTime(picked.time)})` : "");
   const refresh = () => {
     lineEl.textContent = picked ? `“${picked.text}” at ${formatTime(picked.time)}` : "No lyric match. Tap “Lyrics” and pick a line.";
@@ -102,6 +113,7 @@ async function renderMatch({ track, hit }) {
       lyricsEl.querySelectorAll(".sel").forEach((e) => e.classList.remove("sel"));
       row.classList.add("sel");
       refresh();
+      if (!previewEl.hidden) loadPreview();
     });
     lyricsEl.append(row);
   }
@@ -112,10 +124,16 @@ async function renderMatch({ track, hit }) {
   // The YouTube lookup happens only here, on demand, to save quota.
   const resolveVideo = async () => { videoId = videoId || (await findVideo(track)); };
   play.addEventListener("click", async () => {
-    const win = window.open("about:blank", "_blank"); // opened synchronously so popup blockers allow it
     await resolveVideo();
-    if (win) win.location.href = currentLink(); else location.href = currentLink();
+    if (!videoId) { window.open(currentLink(), "_blank"); return; }
+    previewEl.hidden = false;
+    loadPreview();
   });
+  previewEl.querySelectorAll("[data-d]").forEach((b) => b.addEventListener("click", () => {
+    offsets[offsetKey] = (offsets[offsetKey] || 0) + Number(b.dataset.d);
+    localStorage.setItem("offsets", JSON.stringify(offsets));
+    loadPreview();
+  }));
   share.addEventListener("click", async () => {
     await resolveVideo();
     const text = currentText(), url = currentLink();
