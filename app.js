@@ -2,6 +2,7 @@ import { parseLrc, bestLine, formatTime } from "./lyrics.js";
 
 const form = document.getElementById("form");
 const qInput = document.getElementById("q");
+const songInput = document.getElementById("song");
 const statusEl = document.getElementById("status");
 const resultsEl = document.getElementById("results");
 
@@ -12,7 +13,7 @@ form.addEventListener("submit", async (e) => {
   resultsEl.innerHTML = "";
   statusEl.textContent = "Searching…";
   try {
-    const matches = await search(query);
+    const matches = await search(query, songInput.value.trim());
     statusEl.textContent = matches.length ? "" : "No matches. Try adding the song title or artist.";
     for (const m of matches) resultsEl.append(await renderMatch(m));
   } catch (err) {
@@ -20,15 +21,22 @@ form.addEventListener("submit", async (e) => {
   }
 });
 
-async function search(query) {
-  const res = await fetch("https://lrclib.net/api/search?q=" + encodeURIComponent(query));
+async function fetchTracks(q) {
+  const res = await fetch("https://lrclib.net/api/search?q=" + encodeURIComponent(q));
   if (!res.ok) throw new Error("lyrics search failed (" + res.status + ")");
-  const tracks = await res.json();
+  return res.json();
+}
+
+async function search(lyric, song) {
+  // LRCLIB only indexes titles/artists, so search by the song text when given, else the lyric itself
+  const tracks = await fetchTracks(song || lyric);
+  const seen = new Set();
   return tracks
     .filter((t) => t.syncedLyrics)
-    .map((t) => {
-      const lines = parseLrc(t.syncedLyrics);
-      return { track: t, hit: bestLine(lines, query) };
+    .map((t) => ({ track: t, hit: bestLine(parseLrc(t.syncedLyrics), lyric) }))
+    .filter(({ track }) => {
+      const k = (track.artistName + track.trackName).toLowerCase();
+      return seen.has(k) ? false : (seen.add(k), true);
     })
     .sort((a, b) => (b.hit?.score ?? 0) - (a.hit?.score ?? 0))
     .slice(0, 5);
