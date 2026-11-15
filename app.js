@@ -85,7 +85,7 @@ async function renderMatch({ track, hit }) {
   const lines = parseLrc(track.syncedLyrics);
   let picked = hit ? { time: hit.time, text: hit.text } : null;
 
-  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div><div class="preview" hidden><iframe allow="autoplay; encrypted-media" allowfullscreen></iframe><select class="version"></select><div class="offset"><button data-d="-5">−5s</button><button data-d="-1">−1s</button><span></span><button data-d="1">+1s</button><button data-d="5">+5s</button></div><p class="hint">Out of sync? Nudge until the lyric lines up, then Share.</p></div><ul class="lyrics" hidden></ul>`;
+  li.innerHTML = `<div class="title"></div><div class="artist"></div><div class="line"></div><div class="actions"></div><div class="preview" hidden><iframe allow="autoplay; encrypted-media" allowfullscreen></iframe><select class="version"></select><div class="offset"><button data-d="-5">−5s</button><button data-d="-1">−1s</button><span></span><button data-d="1">+1s</button><button data-d="5">+5s</button></div><div class="clip">Clip length: <button data-l="-5">−5s</button><button data-l="-1">−1s</button><span class="len"></span><button data-l="1">+1s</button><button data-l="5">+5s</button></div><p class="hint">Out of sync? Nudge until the lyric lines up, then Share.</p></div><ul class="lyrics" hidden></ul>`;
   li.querySelector(".title").textContent = track.trackName;
   li.querySelector(".artist").textContent = track.artistName;
   const lineEl = li.querySelector(".line");
@@ -93,13 +93,21 @@ async function renderMatch({ track, hit }) {
 
   const offsetKey = `${track.artistName} ${track.trackName}`;
   const startTime = () => Math.max(0, (picked ? picked.time - 2 : 0) + (offsets[offsetKey] || 0)); // lead in a little
-  const currentLink = () => linkFor(track, videoId, startTime());
+  let clipLen = 15;
+  const endTime = () => startTime() + clipLen;
+  const currentLink = () => {
+    if (!videoId) return linkFor(track, videoId, startTime());
+    const u = new URL("clip.html", location.href);
+    u.search = new URLSearchParams({ v: videoId, s: Math.floor(startTime()), e: Math.ceil(endTime()), t: `${track.trackName} – ${track.artistName}` });
+    return u.href;
+  };
   const previewEl = li.querySelector(".preview");
   const frame = previewEl.querySelector("iframe");
   const offsetLabel = previewEl.querySelector(".offset span");
   const loadPreview = () => {
     offsetLabel.textContent = `${(offsets[offsetKey] || 0) > 0 ? "+" : ""}${offsets[offsetKey] || 0}s`;
-    frame.src = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime())}&autoplay=1&playsinline=1`;
+    previewEl.querySelector(".len").textContent = `${clipLen}s`;
+    frame.src = `https://www.youtube.com/embed/${videoId}?start=${Math.floor(startTime())}&end=${Math.ceil(endTime())}&autoplay=1&playsinline=1&rel=0`;
   };
   const currentText = () => `🎵 ${track.trackName} – ${track.artistName}` + (picked ? ` (${formatTime(picked.time)})` : "");
   const refresh = () => {
@@ -149,6 +157,10 @@ async function renderMatch({ track, hit }) {
     previewEl.hidden = false;
     loadPreview();
   });
+  previewEl.querySelectorAll("[data-l]").forEach((b) => b.addEventListener("click", () => {
+    clipLen = Math.max(1, clipLen + Number(b.dataset.l));
+    loadPreview();
+  }));
   previewEl.querySelectorAll("[data-d]").forEach((b) => b.addEventListener("click", () => {
     offsets[offsetKey] = (offsets[offsetKey] || 0) + Number(b.dataset.d);
     localStorage.setItem("offsets", JSON.stringify(offsets));

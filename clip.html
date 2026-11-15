@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>A song clip for you</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>🎵 <span id="t"></span></h1>
+    <iframe id="f" allow="autoplay; encrypted-media" allowfullscreen style="width:100%;aspect-ratio:16/9;border:0;border-radius:10px"></iframe>
+    <p class="sub">Tap play. The clip stops at the end point.</p>
+  </main>
+  <script>
+    const p = new URLSearchParams(location.search);
+    const v = (p.get("v") || "").replace(/[^\w-]/g, "");
+    const n = (k) => Math.max(0, parseInt(p.get(k), 10) || 0);
+    document.getElementById("t").textContent = p.get("t") || "Song clip";
+    document.getElementById("f").src = `https://www.youtube.com/embed/${v}?start=${n("s")}&end=${n("e")}&playsinline=1&rel=0`;
+  </script>
+</body>
+</html>

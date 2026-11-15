@@ -23,3 +23,5 @@ li { background: #1c1c1c; border-radius: 12px; padding: 14px; margin: 12px 0; }
 .offset button { padding: 8px 12px; background: #333; color: #eee; font-size: 15px; }
 .hint { color: #aaa; font-size: 13px; text-align: center; margin: 6px 0 0; }
 .version { width: 100%; margin-top: 8px; padding: 8px; border-radius: 8px; background: #222; color: inherit; border: 1px solid #444; font-size: 14px; }
+.clip { display: flex; gap: 8px; align-items: center; justify-content: center; margin-top: 8px; font-size: 14px; color: #aaa; }
+.clip button { padding: 8px 10px; background: #333; color: #eee; font-size: 14px; }
