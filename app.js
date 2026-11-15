@@ -42,10 +42,22 @@ async function search(lyric, song) {
     .slice(0, 5);
 }
 
+const videoCache = JSON.parse(localStorage.getItem("videoCache") || "{}");
+
 async function findVideo(track) {
   const q = `${track.artistName} ${track.trackName}`;
   const key = window.YT_API_KEY;
   if (!key) return null;
+  if (videoCache[q]) return videoCache[q];
+  const id = await fetchVideo(q, key);
+  if (id) {
+    videoCache[q] = id;
+    localStorage.setItem("videoCache", JSON.stringify(videoCache));
+  }
+  return id;
+}
+
+async function fetchVideo(q, key) {
   const url = "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&q=" +
     encodeURIComponent(q) + "&key=" + key;
   const res = await fetch(url);
@@ -61,7 +73,7 @@ function linkFor(track, videoId, seconds) {
 
 async function renderMatch({ track, hit }) {
   const li = document.createElement("li");
-  const videoId = await findVideo(track);
+  let videoId = null;
   const lines = parseLrc(track.syncedLyrics);
   let picked = hit ? { time: hit.time, text: hit.text } : null;
 
@@ -75,11 +87,10 @@ async function renderMatch({ track, hit }) {
   const currentText = () => `🎵 ${track.trackName} – ${track.artistName}` + (picked ? ` (${formatTime(picked.time)})` : "");
   const refresh = () => {
     lineEl.textContent = picked ? `“${picked.text}” at ${formatTime(picked.time)}` : "No lyric match. Tap “Lyrics” and pick a line.";
-    play.href = currentLink();
   };
 
   const actions = li.querySelector(".actions");
-  const play = Object.assign(document.createElement("a"), { target: "_blank", rel: "noopener", textContent: "Play" });
+  const play = Object.assign(document.createElement("button"), { textContent: "Play" });
   const toggle = Object.assign(document.createElement("button"), { textContent: "Lyrics" });
   const share = Object.assign(document.createElement("button"), { className: "share", textContent: "Share" });
 
@@ -98,10 +109,22 @@ async function renderMatch({ track, hit }) {
     lyricsEl.hidden = !lyricsEl.hidden;
     toggle.textContent = lyricsEl.hidden ? "Lyrics" : "Hide lyrics";
   });
+  // The YouTube lookup happens only here, on demand, to save quota.
+  const resolveVideo = async () => { videoId = videoId || (await findVideo(track)); };
+  play.addEventListener("click", async () => {
+    const win = window.open("about:blank", "_blank"); // opened synchronously so popup blockers allow it
+    await resolveVideo();
+    if (win) win.location.href = currentLink(); else location.href = currentLink();
+  });
   share.addEventListener("click", async () => {
+    await resolveVideo();
     const text = currentText(), url = currentLink();
     if (navigator.share) {
-      try { await navigator.share({ title: text, text, url }); } catch { /* cancelled */ }
+      try { await navigator.share({ title: text, text, url }); }
+      catch (err) {
+        // iOS can reject share after the async lookup; the video is now cached, so a second tap works
+        if (err.name === "NotAllowedError") share.textContent = "Tap again to share";
+      }
     } else {
       location.href = "sms:&body=" + encodeURIComponent(`${text}\n${url}`);
     }
